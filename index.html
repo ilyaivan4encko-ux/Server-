@@ -1,0 +1,641 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Pong 2.0 — Full</title>
+<style>
+  :root{
+    --bg:#06121a; --panel:#0b2330; --accent:#ffd166; --accent-2:#5eead4; --muted:#9fb3c8; --text:#e6f0f6;
+  }
+  [data-theme="light"]{ --bg:#f6f9fb; --panel:#ffffff; --accent:#0a84ff; --accent-2:#0b8a5c; --muted:#3f4a56; --text:#052026; }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#001018);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:var(--text)}
+  .wrap{max-width:1100px;margin:8px auto;padding:12px;display:flex;gap:12px;flex-direction:column}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  h1{margin:0;font-size:18px;color:var(--accent)}
+  .topbar{display:flex;gap:8px;align-items:center}
+  .panel{background:linear-gradient(180deg,var(--panel),rgba(0,0,0,0.2));padding:10px;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  .layout{display:flex;gap:12px;align-items:flex-start}
+  .left{flex:1;min-width:320px}
+  .right{width:360px;display:flex;flex-direction:column;gap:12px}
+  #canvas{width:100%;height:560px;border-radius:10px;background:linear-gradient(180deg,#02252c,#001020);display:block;touch-action:none}
+  label{font-size:13px;color:var(--muted)}
+  input,select,button{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)}
+  button.primary{background:var(--accent);border:none;color:#03101a;font-weight:700}
+  .row{display:flex;gap:8px;align-items:center}
+  .muted{color:var(--muted);font-size:13px}
+  .small{font-size:13px;color:var(--muted)}
+  .avatars{display:flex;gap:8px;flex-wrap:wrap}
+  .avatar{width:46px;height:46px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:2px solid transparent;cursor:pointer}
+  .avatar.selected{outline:3px solid rgba(255,255,255,0.06)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .big{font-weight:700;color:#fff;font-size:16px}
+  footer{color:var(--muted);font-size:13px;text-align:center;padding:6px}
+  .badge{background:rgba(255,255,255,0.04);padding:6px 8px;border-radius:8px}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--panel);padding:8px 12px;border-radius:10px;color:var(--text);box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  @media(max-width:980px){ .layout{flex-direction:column} .right{width:100%} #canvas{height:420px} }
+</style>
+</head>
+<body data-theme="dark">
+<div class="wrap">
+  <header>
+    <h1>Pong 2.0 — Online</h1>
+    <div class="topbar">
+      <div class="muted">Твой сигналинг: <strong style="color:var(--accent)">pong2-0.onrender.com</strong></div>
+      <button id="themeBtn" class="small">Тема</button>
+      <button id="soundBtn" class="small">Звук</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="left">
+      <div class="panel">
+        <canvas id="canvas" width="1100" height="560" tabindex="0"></canvas>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <div class="badge">Роль: <span id="roleLabel">—</span></div>
+        <div class="badge">Статус сети: <span id="netState">WS:— / RTC:—</span></div>
+        <div style="margin-left:auto" class="muted">Двойной тап на экране — старт/пауза</div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <div class="row" style="align-items:center;justify-content:space-between">
+          <div>
+            <label class="small">ID комнаты</label><br>
+            <input id="roomId" placeholder="введите ID комнаты" style="width:180px" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button id="joinBtn" class="primary">Войти</button>
+            <button id="leaveBtn" class="small">Выйти</button>
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label class="small">Твоё имя</label>
+          <input id="myName" placeholder="Игрок" />
+        </div>
+
+        <div style="margin-top:10px">
+          <label class="small">Аватар</label>
+          <div class="avatars" id="avatars"></div>
+        </div>
+
+        <div style="margin-top:10px" class="row">
+          <label class="small">Матч до</label>
+          <select id="toScore">
+            <option value="3">3</option><option value="5" selected>5</option><option value="7">7</option>
+          </select>
+          <label class="small">Best of</label>
+          <select id="bestOf">
+            <option value="1">1</option><option value="3" selected>3</option><option value="5">5</option>
+          </select>
+        </div>
+
+        <div style="margin-top:10px" class="row">
+          <button id="readyBtn" class="small">Готов</button>
+          <div id="lobbyInfo" class="muted" style="margin-left:auto">Ждём игрока...</div>
+        </div>
+
+        <hr style="opacity:.06;margin:10px 0">
+
+        <div class="muted">Рекорды (локально)</div>
+        <div id="records" class="big">—</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="exportBtn" class="small">Экспорт</button>
+          <label for="fileIn" class="small" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.05);cursor:pointer">Импорт</label>
+          <input id="fileIn" type="file" accept="application/json" style="display:none" />
+          <button id="copyLink" class="small">Скопировать ссылку</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="muted">Справка</div>
+        <ul style="margin:6px 0 0 18px;color:var(--muted)">
+          <li>Хост (первый вошедший) — авторитет мяча.</li>
+          <li>Клиент — отправляет своё положение (плавно интерполируется).</li>
+          <li>Если P2P долго не соединяется — используй ngrok / TURN.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer>Нужна помощь с деплоем сигнального сервера или TURN — скажи, помогу.</footer>
+</div>
+
+<div id="toast" class="toast" style="display:none"></div>
+
+<script>
+/* -----------------------------
+   FULL PONG 2.0 CLIENT
+   - Auto signaling: wss://pong2-0.onrender.com
+   - Only room ID input required
+   - Lobby + avatars + ready + sounds + theme + mobile friendly
+   - Host authoritative for ball
+   - Client sends inputs; client-side interpolation for smoothing
+   ----------------------------- */
+
+const SIGNAL_HOST = "wss://pong2-0.onrender.com"; // <- твой адрес
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W = canvas.width, H = canvas.height;
+function fit(){ const maxW = Math.min(window.innerWidth - 24, 1100); const ratio = W/H; const w = maxW; const h = Math.round(w/ratio); canvas.style.width = w+'px'; canvas.style.height = h+'px'; }
+fit(); window.addEventListener('resize', fit);
+
+/* UI elements */
+const joinBtn = document.getElementById('joinBtn'), leaveBtn = document.getElementById('leaveBtn');
+const roomIdEl = document.getElementById('roomId'), myNameEl = document.getElementById('myName'), avatarsEl = document.getElementById('avatars');
+const readyBtn = document.getElementById('readyBtn'), lobbyInfo = document.getElementById('lobbyInfo');
+const roleLabel = document.getElementById('roleLabel'), netState = document.getElementById('netState');
+const recordsEl = document.getElementById('records'), exportBtn = document.getElementById('exportBtn'), fileIn = document.getElementById('fileIn'), copyLinkBtn = document.getElementById('copyLink');
+const themeBtn = document.getElementById('themeBtn'), soundBtn = document.getElementById('soundBtn');
+const toScoreSel = document.getElementById('toScore'), bestOfSel = document.getElementById('bestOf');
+
+let ws = null, pc = null, dc = null;
+let connectedRTC = false;
+let role = 'none'; // 'host' | 'client' | 'none'
+let room = null;
+let myId = null;
+let peersCount = 0;
+let ready = false;
+let myAvatar = 0;
+let audioOn = true;
+
+/* Game state (authoritative stored on host) */
+const G = {
+  pW: 14, pH: 120,
+  leftY: H/2, rightY: H/2,
+  ball: { x: W/2, y: H/2, vx: 6, vy: 3 },
+  scoreL: 0, scoreR: 0,
+  running: false
+};
+
+/* interpolation targets (client-side smoothing) */
+let interp = {
+  leftY: G.leftY, rightY: G.rightY, ballX: G.ball.x, ballY: G.ball.y
+};
+
+/* local saves */
+const SAVE_KEY = 'pong2_full_save_v1';
+let save = { name: 'Player', records: [] };
+function loadSave(){ try{ const raw = localStorage.getItem(SAVE_KEY); if(raw) save = JSON.parse(raw); }catch(e){} myNameEl.value = save.name || 'Player'; renderRecords(); }
+function saveStorage(){ save.name = myNameEl.value || 'Player'; localStorage.setItem(SAVE_KEY, JSON.stringify(save)); renderRecords(); }
+function renderRecords(){ recordsEl.textContent = save.records.length ? save.records.join(' | ') : '—'; }
+loadSave();
+
+/* avatars */
+const AVS = ['😀','😎','🦊','🐼','🧊','🐲','👾','🏆'];
+function buildAvatars(){
+  avatarsEl.innerHTML = '';
+  AVS.forEach((a,i)=>{
+    const div = document.createElement('div'); div.className='avatar'; div.textContent = a;
+    div.onclick = ()=>{ myAvatar = i; document.querySelectorAll('.avatar').forEach(x=>x.classList.remove('selected')); div.classList.add('selected'); };
+    if(i===0) div.classList.add('selected');
+    avatarsEl.appendChild(div);
+  });
+}
+buildAvatars();
+
+/* toast */
+const toast = document.getElementById('toast');
+let toastTimer = null;
+function showToast(msg, t=2200){ toast.textContent = msg; toast.style.display='block'; clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ toast.style.display='none'; }, t); }
+
+/* audio - simple beep generator */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(freq=440,dur=0.08,vol=0.12,type='sine'){ if(!audioOn) return; try{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type=type; o.frequency.value=freq; g.gain.value=vol; o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + dur); }catch(e){} }
+function hitSound(){ beep(900,0.04,0.08,'square'); }
+function scoreSound(){ beep(220,0.2,0.12,'sine'); }
+function winSound(){ beep(1200,0.2,0.16,'triangle'); beep(800,0.2,0.12,'sine'); }
+
+/* network helpers */
+function setNet(s){ netState.textContent = s; }
+function connectWS(){
+  if(ws && ws.readyState === WebSocket.OPEN) return;
+  try{
+    ws = new WebSocket(SIGNAL_HOST);
+  }catch(e){ showToast('Не удалось создать WS'); return; }
+  ws.onopen = ()=>{ setNet('WS: connected'); if(room) ws.send(JSON.stringify({ join: room })); };
+  ws.onclose = ()=>{ setNet('WS: closed'); setTimeout(()=>{ setNet('WS: reconnecting...'); tryReconnectWS(); }, 1500); };
+  ws.onerror = ()=>{ setNet('WS: error'); };
+  ws.onmessage = ev => { try{ const m=JSON.parse(ev.data); handleSignal(m); }catch(e){ console.warn('bad msg', ev.data); } };
+}
+function tryReconnectWS(){ if(!room) return; if(!ws || ws.readyState !== WebSocket.OPEN) connectWS(); }
+
+/* signaling message handler */
+async function handleSignal(msg){
+  if(msg.type === 'joined'){ myId = msg.yourId; peersCount = msg.peers; setNet(`WS: in room • peers:${peersCount}`); // determine role
+    if(peersCount === 1){ role = 'host'; roleLabel.textContent = 'Хост (авторитет)'; }
+    else { role = 'client'; roleLabel.textContent = 'Клиент'; }
+    updateLobby(); return;
+  }
+  if(msg.type === 'peer-joined'){ peersCount++; setNet(`WS: peers:${peersCount}`); updateLobby(); // if host create offer to new peer
+    if(role === 'host'){ await ensurePC(true); createOffer(); }
+    return;
+  }
+  if(msg.type === 'peer-left'){ peersCount = Math.max(0, peersCount-1); setNet(`WS: peers:${peersCount}`); showToast('Игрок вышел'); updateLobby(); cleanupPeer(); return; }
+
+  // forwarding: offer/answer/ice
+  if(msg.type === 'offer'){ await ensurePC(false); await pc.setRemoteDescription(new RTCSessionDescription(msg.offer)); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({ type:'answer', answer })); }
+  if(msg.type === 'answer'){ if(!pc) return; await pc.setRemoteDescription(new RTCSessionDescription(msg.answer)); }
+  if(msg.type === 'ice'){ if(pc && msg.candidate){ try{ await pc.addIceCandidate(msg.candidate); }catch(e){console.warn('ICE err',e);} } }
+}
+
+/* PeerConnection & DataChannel */
+const RTC_CONFIG = { iceServers: [{ urls:'stun:stun.l.google.com:19302' }] };
+
+async function ensurePC(isCaller){
+  if(pc) return;
+  pc = new RTCPeerConnection(RTC_CONFIG);
+  pc.onicecandidate = e => { if(e.candidate) ws.send(JSON.stringify({ type:'ice', candidate: e.candidate })); };
+  pc.onconnectionstatechange = ()=> {
+    setNet('WS: connected • RTC:' + pc.connectionState);
+    if(pc.connectionState === 'connected'){ connectedRTC = true; showToast('RTC connected'); if(role==='host') startMatchIfBothReady(); }
+    if(pc.connectionState === 'disconnected' || pc.connectionState==='failed' || pc.connectionState==='closed'){ connectedRTC=false; showToast('RTC disconnected'); }
+  };
+  pc.ondatachannel = ev => {
+    dc = ev.channel;
+    setupDC();
+  };
+  if(isCaller){
+    dc = pc.createDataChannel('pong', { ordered:true });
+    setupDC();
+  }
+}
+
+function cleanupPeer(){
+  if(dc){ try{ dc.close(); }catch(e){} dc=null; }
+  if(pc){ try{ pc.close(); }catch(e){} pc=null; }
+  connectedRTC = false;
+}
+
+function setupDC(){
+  if(!dc) return;
+  dc.onopen = ()=>{ showToast('DataChannel open'); };
+  dc.onclose = ()=>{ showToast('DC closed'); };
+  dc.onmessage = ev => { try{ const msg = JSON.parse(ev.data); handleDC(msg); }catch(e){ console.warn('bad dc', ev.data); } };
+}
+
+/* DataChannel message protocol:
+  client -> host: { type:'input', y:rightY, name, avatar, ready }
+  host -> client: { type:'state', leftY, rightY, ball, scoreL, scoreR, running }
+  host -> client: { type:'start' }
+  any -> any: { type:'chat', text } (future)
+*/
+
+/* send helper */
+function sendDC(obj){
+  if(dc && dc.readyState === 'open'){
+    try{ dc.send(JSON.stringify(obj)); }catch(e){}
+  }
+}
+
+/* DC handler */
+function handleDC(msg){
+  if(msg.type === 'input' && role === 'host'){
+    // update client's paddle
+    G.rightY = msg.y;
+    if(msg.name) save.nameOpponent = msg.name;
+    if(typeof msg.ready !== 'undefined') remoteReady = !!msg.ready;
+    // avatar
+    if(typeof msg.avatar !== 'undefined') remoteAvatar = msg.avatar;
+  } else if(msg.type === 'state' && role === 'client'){
+    // update interpolation targets
+    interp.leftY = msg.leftY;
+    interp.rightY = msg.rightY;
+    interp.ballX = msg.ball.x; interp.ballY = msg.ball.y;
+    G.scoreL = msg.scoreL; G.scoreR = msg.scoreR;
+    G.running = !!msg.running;
+  } else if(msg.type === 'start'){
+    G.running = true;
+  } else if(msg.type === 'readySync'){
+    // ignore here
+  }
+}
+
+/* UI: join / leave / ready */
+joinBtn.addEventListener('click', ()=>{
+  const r = roomIdEl.value.trim();
+  if(!r) return showToast('Введите ID комнаты');
+  room = r;
+  connectWS();
+  if(ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ join: room }));
+  // update link
+  copyLinkBtn.onclick = ()=>{ const link = location.href.split('#')[0] + '#room=' + encodeURIComponent(room); navigator.clipboard.writeText(link).then(()=>showToast('Ссылка скопирована')); };
+});
+leaveBtn.addEventListener('click', ()=>{ if(ws) ws.close(); cleanupPeer(); ws=null; room=null; role='none'; roleLabel.textContent='—'; setNet('WS:— / RTC:—'); showToast('Отключено'); });
+
+let remoteReady = false;
+readyBtn.addEventListener('click', ()=>{
+  ready = !ready;
+  readyBtn.textContent = ready ? 'Готов ✓' : 'Готов';
+  // send ready status in input for client
+  if(role==='client'){ sendDC({ type:'input', y:G.rightY, name: myNameEl.value, avatar: myAvatar, ready }); }
+  updateLobby();
+  if(role==='host') startMatchIfBothReady();
+});
+
+/* lobby state render */
+function updateLobby(){
+  lobbyInfo.textContent = role==='host' ? `Ты хост • Игроков: ${peersCount}` : (role==='client' ? `Клиент • Игроков: ${peersCount}` : 'Вне комнаты');
+}
+
+/* Matching: host starts match when both ready */
+function startMatchIfBothReady(){
+  // host-side check: if we have exactly 2 peers and remoteReady true and local ready true -> start
+  if(role!=='host') return;
+  if(peersCount >= 2 && ready && remoteReady && connectedRTC){
+    // reset scores & ball
+    G.scoreL = 0; G.scoreR = 0; resetBall(Math.random()<0.5?1:-1);
+    G.running = true;
+    sendDC({ type:'start' });
+    showToast('Матч начался!');
+  }
+}
+
+/* Scores & records saving */
+function recordMatch(){
+  const s = `${G.scoreL}:${G.scoreR}`;
+  save.records.unshift(s);
+  if(save.records.length > 10) save.records.length = 10;
+  saveStorage();
+}
+
+/* export/import saves */
+exportBtn.addEventListener('click', ()=>{
+  const data = JSON.stringify(save, null, 2);
+  const blob = new Blob([data], { type:'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pong2-save.json'; document.body.appendChild(a); a.click(); a.remove();
+});
+fileIn.addEventListener('change', (e)=>{ const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = ()=>{ try{ save = JSON.parse(r.result); saveStorage(); showToast('Импортировано'); }catch(e){ showToast('Ошибка импорта'); } }; r.readAsText(f); e.target.value=''; });
+
+/* theme & sound */
+themeBtn.addEventListener('click', ()=>{
+  const el = document.documentElement;
+  if(el.getAttribute('data-theme') === 'light'){ el.setAttribute('data-theme','dark'); } else { el.setAttribute('data-theme','light'); }
+});
+soundBtn.addEventListener('click', ()=>{ audioOn = !audioOn; soundBtn.textContent = audioOn ? 'Звук' : 'Без звука'; });
+
+/* copy link */
+copyLinkBtn.addEventListener('click', ()=>{ const r = roomIdEl.value.trim(); if(!r) return showToast('Сначала введи room id'); const link = location.href.split('#')[0] + '#room=' + encodeURIComponent(r); navigator.clipboard.writeText(link).then(()=>showToast('Ссылка в буфере')); });
+
+/* On load: pre-fill room if #room=... */
+(function checkHash(){ try{ if(location.hash && location.hash.startsWith('#room=')){ roomIdEl.value = decodeURIComponent(location.hash.slice(6)); } }catch(e){} })();
+
+/* =========================================================
+   GAME LOGIC: host authoritative physics; client sends inputs
+   ========================================================= */
+
+let lastTime = 0;
+function resetBall(dir){
+  G.ball.x = W/2; G.ball.y = H/2;
+  G.ball.vx = 6 * (dir || (Math.random()<0.5?1:-1));
+  G.ball.vy = (Math.random()*4 - 2);
+}
+resetBall();
+
+/* Host tick - authoritative */
+function hostTick(dt){
+  if(!G.running) return;
+  // move ball
+  G.ball.x += G.ball.vx * dt;
+  G.ball.y += G.ball.vy * dt;
+
+  // bounce top/bottom
+  if(G.ball.y < 8){ G.ball.y = 8; G.ball.vy *= -1; }
+  if(G.ball.y > H-8){ G.ball.y = H-8; G.ball.vy *= -1; }
+
+  // clamp paddles
+  const half = G.pH/2;
+  G.leftY = Math.max(half, Math.min(H-half, G.leftY));
+  G.rightY = Math.max(half, Math.min(H-half, G.rightY));
+
+  // collide left paddle (x ~ 24)
+  if(G.ball.x < 40){
+    if(Math.abs(G.ball.y - G.leftY) < G.pH/2 + 8){
+      G.ball.x = 40; G.ball.vx *= -1.05; const d = (G.ball.y - G.leftY)/(G.pH/2); G.ball.vy += d*3; hitSound();
+    } else {
+      // right scores
+      G.scoreR++; scoreSound(); recordIfMatchEnd();
+      resetBall(1);
+    }
+  }
+
+  // collide right paddle
+  if(G.ball.x > W-40){
+    if(Math.abs(G.ball.y - G.rightY) < G.pH/2 + 8){
+      G.ball.x = W-40; G.ball.vx *= -1.05; const d = (G.ball.y - G.rightY)/(G.pH/2); G.ball.vy += d*3; hitSound();
+    } else {
+      // left scores
+      G.scoreL++; scoreSound(); recordIfMatchEnd();
+      resetBall(-1);
+    }
+  }
+
+  // send state to client(s)
+  sendDC({ type:'state', leftY: G.leftY, rightY: G.rightY, ball: G.ball, scoreL: G.scoreL, scoreR: G.scoreR, running: G.running });
+}
+
+/* check match end */
+function recordIfMatchEnd(){
+  const to = parseInt(toScoreSel.value,10);
+  if(G.scoreL >= to || G.scoreR >= to){
+    // match ended
+    recordMatch();
+    // best of logic
+    // For simplicity: winner is whoever reached to; stop running and mark winner
+    G.running = false;
+    showToast(`Матч завершён ${G.scoreL}:${G.scoreR}`);
+    // play win
+    winSound();
+  }
+}
+
+/* clientTick - sends input periodically */
+let lastInputSent = 0;
+function clientTick(dt){
+  if(!G.running) return;
+  lastInputSent += dt;
+  if(lastInputSent > 1/30){
+    lastInputSent = 0;
+    // send our paddle (client controls right paddle)
+    sendDC({ type:'input', y: G.rightY, name: myNameEl.value, avatar: myAvatar, ready });
+  }
+}
+
+/* recordIfMatchEnd for host just recorded above */
+
+/* interpolation for clients to smooth */
+function interpStep(alpha=0.12){
+  // lerp leftY, rightY, ball
+  const lerp = (a,b,t)=> a + (b-a)*t;
+  // left
+  G.leftY = lerp(G.leftY, interp.leftY, alpha);
+  G.rightY = lerp(G.rightY, interp.rightY, alpha);
+  G.ball.x = lerp(G.ball.x, interp.ballX, alpha);
+  G.ball.y = lerp(G.ball.y, interp.ballY, alpha);
+}
+
+/* rendering */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // bg
+  const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#042a2c'); g.addColorStop(1,'#001015');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // midline
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  for(let y=12;y<H;y+=28) ctx.fillRect(W/2 - 2, y, 4, 12);
+
+  // paddles
+  ctx.fillStyle = '#5eead4';
+  ctx.fillRect(24, G.leftY - G.pH/2, G.pW, G.pH);
+  ctx.fillRect(W - 24 - G.pW, G.rightY - G.pH/2, G.pW, G.pH);
+
+  // avatars near paddles
+  ctx.font = '28px sans-serif';
+  ctx.fillStyle = '#fff';
+  const leftAvatar = AVS[myAvatar] || '😀';
+  const rightAvatar = save.nameOpponent && AVS[remoteAvatar] ? AVS[remoteAvatar] : '🤝';
+  ctx.fillText(leftAvatar, 10, 32);
+  ctx.fillText(rightAvatar, W-44, 32);
+
+  // ball
+  ctx.beginPath(); ctx.arc(G.ball.x, G.ball.y, 9, 0, Math.PI*2);
+  ctx.fillStyle = '#ffd166'; ctx.fill();
+
+  // scores
+  ctx.fillStyle = '#e6f0f6'; ctx.font = '44px sans-serif';
+  ctx.fillText(G.scoreL, W/2 - 80, 70); ctx.fillText(G.scoreR, W/2 + 50, 70);
+
+  // names
+  ctx.font = '14px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillText(myNameEl.value || save.name || 'You', 36, 32);
+  ctx.fillText(save.nameOpponent || 'Friend', W - 120, 32);
+}
+
+/* main loop */
+let lastframets = performance.now();
+function loop(ts){
+  const dtms = Math.min(50, ts - lastframets); lastframets = ts;
+  const dt = dtms / 16; // normalized to ~60fps base
+
+  if(role === 'host'){
+    hostTick(dt);
+  } else if(role === 'client'){
+    clientTick(dt);
+    // interpolation for visual smoothing
+    interpStep(0.15);
+  } else {
+    // no network - local preview
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ===========================
+   INPUT: mobile touch / mouse
+   =========================== */
+
+let activePointer = null;
+canvas.addEventListener('pointerdown', (e)=>{
+  activePointer = e.pointerId;
+  canvas.setPointerCapture(activePointer);
+  onPointerMove(e);
+});
+canvas.addEventListener('pointerup', (e)=>{
+  try{ canvas.releasePointerCapture(e.pointerId); }catch(e){} activePointer = null;
+});
+canvas.addEventListener('pointermove', onPointerMove);
+
+function onPointerMove(e){
+  const rect = canvas.getBoundingClientRect();
+  const y = ((e.clientY - rect.top) / rect.height) * H;
+  // decide side by x
+  const x = ((e.clientX - rect.left) / rect.width) * W;
+  if(role === 'host' || role === 'none'){
+    // host controls left paddle
+    if(x < W/2) G.leftY = y;
+    else G.rightY = y;
+  } else if(role === 'client'){
+    // client controls right paddle only
+    if(x > W/2) G.rightY = y;
+  }
+}
+
+/* keyboard support */
+window.addEventListener('keydown', (e)=>{
+  if(e.key === 'w') G.leftY -= 24;
+  if(e.key === 's') G.leftY += 24;
+  if(e.key === 'ArrowUp') G.rightY -= 24;
+  if(e.key === 'ArrowDown') G.rightY += 24;
+});
+
+/* send input loop for client regularly even when not moving */
+setInterval(()=>{ if(role === 'client' && connectedRTC && dc && dc.readyState === 'open'){ sendDC({ type:'input', y:G.rightY, name: myNameEl.value, avatar: myAvatar, ready }); } }, 33);
+
+/* helper: create offer */
+async function createOffer(){
+  try{
+    await ensurePC(true);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ type:'offer', offer }));
+  }catch(e){ console.warn('offer err', e); }
+}
+
+/* attempt to auto-start when both ready & connected (host) */
+function startMatchIfBothReady(){
+  if(role !== 'host') return;
+  if(peersCount >= 2 && ready && remoteReady && connectedRTC){
+    G.scoreL = 0; G.scoreR = 0; resetBall(Math.random()<0.5?1:-1); G.running = true;
+    sendDC({ type:'start' });
+    showToast('Матч начался');
+  }
+}
+
+/* record & persist on end */
+function recordMatch(){
+  const s = `${G.scoreL}:${G.scoreR}`;
+  save.records.unshift(s);
+  if(save.records.length > 10) save.records.length = 10;
+  saveStorage();
+}
+
+/* when host checks if match ended - already done in hostTick via recordIfMatchEnd */
+
+/* small reconnection watchdog */
+setInterval(()=>{ if(ws && ws.readyState === WebSocket.CLOSED){ setNet('WS closed'); ws=null; } }, 3000);
+
+/* few more helpers */
+function sendDC(obj){ if(dc && dc.readyState === 'open'){ try{ dc.send(JSON.stringify(obj)); }catch(e){} } }
+function recordIfMatchEnd(){ /* older function placeholder */ }
+
+/* initialize UI & events */
+(function init(){
+  // prefill name
+  myNameEl.value = save.name || 'Player';
+  myNameEl.addEventListener('change', saveStorage);
+  // avatar selection visual
+  document.querySelectorAll('.avatar').forEach((n,i)=> n.onclick = ()=>{ myAvatar = i; document.querySelectorAll('.avatar').forEach(x=>x.classList.remove('selected')); n.classList.add('selected'); });
+  // load remote avatar default
+  window.remoteAvatar = 0;
+  // copy link by clicking input area
+  copyLinkBtn.onclick = ()=> { const r = roomIdEl.value.trim(); if(!r) return showToast('Введите ID комнаты'); const link = location.href.split('#')[0] + '#room=' + encodeURIComponent(r); navigator.clipboard.writeText(link).then(()=> showToast('Ссылка скопирована')); };
+  // prefill from hash
+  try{ if(location.hash && location.hash.startsWith('#room=')){ roomIdEl.value = decodeURIComponent(location.hash.slice(6)); } }catch(e){}
+  // sound button text
+  soundBtn.textContent = audioOn ? 'Звук' : 'Без звука';
+})();
+
+/* finalize: expose some debug to window for dev */
+window._Pong2 = { G, interp, ensurePC, cleanupPeer, sendDC };
+
+/* END */
+</script>
+</body>
+</html>
